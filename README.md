@@ -223,18 +223,84 @@ WHERE purchased='Y';
 
 ---
 
-## 💡 Extra Features (Optional Suggestions)
 
-* Add PL/SQL Triggers for auto-updating inventory
-* Include Functions for returning popular products
-* Use Stored Procedures for checkout process
-* Add views for admin dashboards
+## 💡 Extra Features (Implemented with SQL Code)
+
+### 1. Trigger: Auto-update inventory after purchase
+
+```sql
+CREATE OR REPLACE TRIGGER update_inventory
+AFTER INSERT ON cart_item
+FOR EACH ROW
+WHEN (NEW.purchased = 'Y')
+BEGIN
+  UPDATE product
+  SET quantity = quantity - :NEW.quantity_wished
+  WHERE product_id = :NEW.product_id;
+END;
+/
+```
+
+### 2. Function: Return most popular product (based on quantity sold)
+
+```sql
+CREATE OR REPLACE FUNCTION get_most_popular_product RETURN VARCHAR2 IS
+  popular_product VARCHAR2(20);
+BEGIN
+  SELECT product_id INTO popular_product
+  FROM (
+    SELECT product_id, SUM(quantity_wished) AS total_sold
+    FROM cart_item
+    WHERE purchased = 'Y'
+    GROUP BY product_id
+    ORDER BY total_sold DESC
+  ) WHERE ROWNUM = 1;
+  RETURN popular_product;
+END;
+/
+```
+
+### 3. Stored Procedure: Checkout process
+
+```sql
+CREATE OR REPLACE PROCEDURE checkout_cart (
+  p_customer_id IN VARCHAR2,
+  p_cart_id IN VARCHAR2,
+  p_payment_type IN VARCHAR2
+) AS
+  v_total NUMBER;
+  v_payment_id VARCHAR2(10);
+BEGIN
+  SELECT SUM(c.quantity_wished * p.cost)
+  INTO v_total
+  FROM cart_item c JOIN product p
+  ON c.product_id = p.product_id
+  WHERE c.cart_id = p_cart_id AND c.purchased = 'N';
+
+  SELECT 'pmt' || TO_CHAR(SYSDATE, 'HH24MISS') INTO v_payment_id FROM dual;
+
+  INSERT INTO payment VALUES(v_payment_id, SYSDATE, p_payment_type, p_customer_id, p_cart_id, v_total);
+
+  UPDATE cart_item SET purchased = 'Y'
+  WHERE cart_id = p_cart_id AND purchased = 'N';
+END;
+/
+```
+
+### 4. View: Admin dashboard to show total revenue by date
+
+```sql
+CREATE OR REPLACE VIEW admin_dashboard AS
+SELECT p.payment_date, SUM(p.total_amount) AS total_revenue
+FROM payment p
+GROUP BY p.payment_date;
+```
 
 ---
 
 ## 📎 How to Run
 
-1. Use Oracle SQL or any other compatible RDBMS
+1. Use MySQL or any other compatible RDBMS
 2. Create tables in the provided order
 3. Insert sample data
 4. Execute queries to verify logic
